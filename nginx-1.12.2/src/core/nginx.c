@@ -38,6 +38,7 @@ static ngx_conf_enum_t  ngx_debug_points[] = {
 };
 
 
+// 模块配置项
 static ngx_command_t  ngx_core_commands[] = {
 
     { ngx_string("daemon"),
@@ -145,6 +146,7 @@ static ngx_command_t  ngx_core_commands[] = {
       0,
       NULL },
 
+    // 加载动态模块
     { ngx_string("load_module"),
       NGX_MAIN_CONF|NGX_DIRECT_CONF|NGX_CONF_TAKE1,
       ngx_load_module,
@@ -156,13 +158,18 @@ static ngx_command_t  ngx_core_commands[] = {
 };
 
 
+// 核心模块上下文
 static ngx_core_module_t  ngx_core_module_ctx = {
+    // 核心模块名称
     ngx_string("core"),
+    // 创建存储配置项的数据结构
     ngx_core_module_create_conf,
+    // 初始化存储配置项的数据结构
     ngx_core_module_init_conf
 };
 
 
+// 定义核心模块
 ngx_module_t  ngx_core_module = {
     NGX_MODULE_V1,
     &ngx_core_module_ctx,                  /* module context */
@@ -179,6 +186,7 @@ ngx_module_t  ngx_core_module = {
 };
 
 
+// 全局静态变量
 static ngx_uint_t   ngx_show_help;
 static ngx_uint_t   ngx_show_version;
 static ngx_uint_t   ngx_show_configure;
@@ -188,6 +196,7 @@ static u_char      *ngx_conf_params;
 static char        *ngx_signal;
 
 
+// 指向环境变量的指针
 static char **ngx_os_environ;
 
 
@@ -203,14 +212,17 @@ main(int argc, char *const *argv)
 
     ngx_debug_init();
 
+    // 初始化 ngx_sys_errlist
     if (ngx_strerror_init() != NGX_OK) {
         return 1;
     }
 
+    // 解析命令行参数
     if (ngx_get_options(argc, argv) != NGX_OK) {
         return 1;
     }
 
+    // 显示版本信息
     if (ngx_show_version) {
         ngx_show_version_info();
 
@@ -221,14 +233,17 @@ main(int argc, char *const *argv)
 
     /* TODO */ ngx_max_sockets = -1;
 
+    // 初始化时间缓存
     ngx_time_init();
 
 #if (NGX_PCRE)
     ngx_regex_init();
 #endif
 
+    // 获取当前进程 pid
     ngx_pid = ngx_getpid();
 
+    // 打开错误日志
     log = ngx_log_init(ngx_prefix);
     if (log == NULL) {
         return 1;
@@ -244,23 +259,28 @@ main(int argc, char *const *argv)
      * ngx_process_options()
      */
 
+    // 初始化 init_cycle
     ngx_memzero(&init_cycle, sizeof(ngx_cycle_t));
     init_cycle.log = log;
     ngx_cycle = &init_cycle;
 
+    // 创建内存池
     init_cycle.pool = ngx_create_pool(1024, log);
     if (init_cycle.pool == NULL) {
         return 1;
     }
 
+    // 保存命令行参数
     if (ngx_save_argv(&init_cycle, argc, argv) != NGX_OK) {
         return 1;
     }
 
+    // 处理命令行参数中的安装路径, 配置文件路径, 配置参数
     if (ngx_process_options(&init_cycle) != NGX_OK) {
         return 1;
     }
 
+    // 获取系统信息
     if (ngx_os_init(log) != NGX_OK) {
         return 1;
     }
@@ -269,18 +289,25 @@ main(int argc, char *const *argv)
      * ngx_crc32_table_init() requires ngx_cacheline_size set in ngx_os_init()
      */
 
+    // 初始 crc32 table
     if (ngx_crc32_table_init() != NGX_OK) {
         return 1;
     }
 
+    // 添加继承的 socket
     if (ngx_add_inherited_sockets(&init_cycle) != NGX_OK) {
         return 1;
     }
 
+    /*
+     * 预初始模块, 按照 ngx_modules.c 文件中 ngx_modules 数组中模块的先后顺序为
+     * 各个模块设置索引 index, 并设置模块名称.
+     */
     if (ngx_preinit_modules() != NGX_OK) {
         return 1;
     }
 
+    // 初始化 cycle, 继承/创建各种数据结构, 继承/创建共享内存等
     cycle = ngx_init_cycle(&init_cycle);
     if (cycle == NULL) {
         if (ngx_test_config) {
@@ -291,6 +318,7 @@ main(int argc, char *const *argv)
         return 1;
     }
 
+    // 测试配置文件, 然后退出
     if (ngx_test_config) {
         if (!ngx_quiet_mode) {
             ngx_log_stderr(0, "configuration file %s test is successful",
@@ -317,10 +345,12 @@ main(int argc, char *const *argv)
         return 0;
     }
 
+    // 信号处理 stop, reopen, reload, quit, 然后退出
     if (ngx_signal) {
         return ngx_signal_process(cycle, ngx_signal);
     }
 
+    // 向错误日志中输出编译信息, 系统状态信息
     ngx_os_status(cycle->log);
 
     ngx_cycle = cycle;
@@ -333,10 +363,12 @@ main(int argc, char *const *argv)
 
 #if !(NGX_WIN32)
 
+    // 初始化信号, 注册 nginx 关心的所有信号以及不同信号所对应的 handler
     if (ngx_init_signals(cycle->log) != NGX_OK) {
         return 1;
     }
 
+    // 后台运行
     if (!ngx_inherited && ccf->daemon) {
         if (ngx_daemon(cycle->log) != NGX_OK) {
             return 1;
@@ -351,14 +383,17 @@ main(int argc, char *const *argv)
 
 #endif
 
+    // 创建 pid 文件
     if (ngx_create_pidfile(&ccf->pid, cycle->log) != NGX_OK) {
         return 1;
     }
 
+    // 将日志重定向为 stderr, 向 stderr 输出的错误信息会输出到日志中
     if (ngx_log_redirect_stderr(cycle) != NGX_OK) {
         return 1;
     }
 
+    // 关闭 log->file->fd 文件句柄
     if (log->file->fd != ngx_stderr) {
         if (ngx_close_file(log->file->fd) == NGX_FILE_ERROR) {
             ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
@@ -368,22 +403,31 @@ main(int argc, char *const *argv)
 
     ngx_use_stderr = 0;
 
+    // 单进程循环处理
     if (ngx_process == NGX_PROCESS_SINGLE) {
         ngx_single_process_cycle(cycle);
 
+    // 多进程循环处理
     } else {
         ngx_master_process_cycle(cycle);
     }
+
+    // TODO 释放 ngx_save_argv() 所分配的内存
+    // TODO 释放 ngx_strerror_init() 所分配的内存
 
     return 0;
 }
 
 
+/*
+ * brief  : 显示帮助信息, 版本信息, 编译信息
+ */
 static void
 ngx_show_version_info(void)
 {
     ngx_write_stderr("nginx version: " NGINX_VER_BUILD NGX_LINEFEED);
 
+    // 显示帮助信息 -?,-h
     if (ngx_show_help) {
         ngx_write_stderr(
             "Usage: nginx [-?hvVtTq] [-s signal] [-c filename] "
@@ -414,6 +458,7 @@ ngx_show_version_info(void)
         );
     }
 
+    // 显示编译信息 -V
     if (ngx_show_configure) {
 
 #ifdef NGX_COMPILER
@@ -441,6 +486,10 @@ ngx_show_version_info(void)
 }
 
 
+/*
+ * brief  : 从环境变量中获取从老 nginx 继承的监听套接字
+ * return : NGX_ERROR/NGX_OK
+ */
 static ngx_int_t
 ngx_add_inherited_sockets(ngx_cycle_t *cycle)
 {
@@ -448,6 +497,7 @@ ngx_add_inherited_sockets(ngx_cycle_t *cycle)
     ngx_int_t         s;
     ngx_listening_t  *ls;
 
+    // 获取环境变量 nginx 的值
     inherited = (u_char *) getenv(NGINX_VAR);
 
     if (inherited == NULL) {
@@ -457,6 +507,7 @@ ngx_add_inherited_sockets(ngx_cycle_t *cycle)
     ngx_log_error(NGX_LOG_NOTICE, cycle->log, 0,
                   "using inherited sockets from \"%s\"", inherited);
 
+    // 初始化由 10 个大小为 sizeof(ngx_listening_t) 的基本存储单元组成的数组
     if (ngx_array_init(&cycle->listening, cycle->pool, 10,
                        sizeof(ngx_listening_t))
         != NGX_OK)
@@ -464,6 +515,7 @@ ngx_add_inherited_sockets(ngx_cycle_t *cycle)
         return NGX_ERROR;
     }
 
+    // 从环境变量中获取另外一个 nginx 的监听句柄, 多个监听句柄用 ':' 或 ';' 分割
     for (p = inherited, v = p; *p; p++) {
         if (*p == ':' || *p == ';') {
             s = ngx_atoi(v, p - v);
@@ -477,13 +529,16 @@ ngx_add_inherited_sockets(ngx_cycle_t *cycle)
 
             v = p + 1;
 
+            // 从 cycle->listening 数组中返回一个 ngx_listening_t 结构体
             ls = ngx_array_push(&cycle->listening);
             if (ls == NULL) {
                 return NGX_ERROR;
             }
 
+            // 初始化
             ngx_memzero(ls, sizeof(ngx_listening_t));
 
+            // 将获取到监听套接字存储到 ls->fd 中
             ls->fd = (ngx_socket_t) s;
         }
     }
@@ -496,6 +551,7 @@ ngx_add_inherited_sockets(ngx_cycle_t *cycle)
 
     ngx_inherited = 1;
 
+    // 通过文件句柄获取继承 sockfd 的相关信息
     return ngx_set_inherited_sockets(cycle);
 }
 
@@ -611,6 +667,9 @@ tz_found:
 }
 
 
+/*
+ * brief  : 释放环境变量所占空间
+ */
 static void
 ngx_cleanup_environment(void *data)
 {
@@ -630,6 +689,10 @@ ngx_cleanup_environment(void *data)
 }
 
 
+/*
+ * brief  : 接收到 SIGUSR2 信号执行新的二进制文件.
+ * return : NGX_INVALID_PID/ngx_new_binary_pid
+ */
 ngx_pid_t
 ngx_exec_new_binary(ngx_cycle_t *cycle, char *const *argv)
 {
@@ -648,6 +711,8 @@ ngx_exec_new_binary(ngx_cycle_t *cycle, char *const *argv)
     ctx.argv = argv;
 
     n = 2;
+
+    // 设置环境变量
     env = ngx_set_environment(cycle, &n);
     if (env == NULL) {
         return NGX_INVALID_PID;
@@ -699,6 +764,7 @@ ngx_exec_new_binary(ngx_cycle_t *cycle, char *const *argv)
 
     ccf = (ngx_core_conf_t *) ngx_get_conf(cycle->conf_ctx, ngx_core_module);
 
+    // 重命名 pid 文件为 nginx.pid.oldbin
     if (ngx_rename_file(ccf->pid.data, ccf->oldpid.data) == NGX_FILE_ERROR) {
         ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
                       ngx_rename_file_n " %s to %s failed "
@@ -711,8 +777,10 @@ ngx_exec_new_binary(ngx_cycle_t *cycle, char *const *argv)
         return NGX_INVALID_PID;
     }
 
+    // 创建新进程
     pid = ngx_execute(cycle, &ctx);
 
+    // 如果新 nginx 执行失败, 将 pid 文件名称恢复
     if (pid == NGX_INVALID_PID) {
         if (ngx_rename_file(ccf->oldpid.data, ccf->pid.data)
             == NGX_FILE_ERROR)
@@ -731,12 +799,17 @@ ngx_exec_new_binary(ngx_cycle_t *cycle, char *const *argv)
 }
 
 
+/*
+ * brief  : 解析命令行参数.
+ * return : NGX_ERROR/NGX_OK
+ */
 static ngx_int_t
 ngx_get_options(int argc, char *const *argv)
 {
     u_char     *p;
     ngx_int_t   i;
 
+    // argv[0] 为 "nginx", 从 argv[1] 开始解析命令行参数
     for (i = 1; i < argc; i++) {
 
         p = (u_char *) argv[i];
@@ -779,11 +852,13 @@ ngx_get_options(int argc, char *const *argv)
                 break;
 
             case 'p':
+                // 形如 -p/data/
                 if (*p) {
                     ngx_prefix = p;
                     goto next;
                 }
 
+                // 形如 -p /data/
                 if (argv[++i]) {
                     ngx_prefix = (u_char *) argv[i];
                     goto next;
@@ -793,11 +868,13 @@ ngx_get_options(int argc, char *const *argv)
                 return NGX_ERROR;
 
             case 'c':
+                // 形如 -c/data/
                 if (*p) {
                     ngx_conf_file = p;
                     goto next;
                 }
 
+                // 形如 -c /data/
                 if (argv[++i]) {
                     ngx_conf_file = (u_char *) argv[i];
                     goto next;
@@ -807,11 +884,13 @@ ngx_get_options(int argc, char *const *argv)
                 return NGX_ERROR;
 
             case 'g':
+                // 形如 -gxx
                 if (*p) {
                     ngx_conf_params = p;
                     goto next;
                 }
 
+                // 形如 -g xx
                 if (argv[++i]) {
                     ngx_conf_params = (u_char *) argv[i];
                     goto next;
@@ -821,9 +900,11 @@ ngx_get_options(int argc, char *const *argv)
                 return NGX_ERROR;
 
             case 's':
+                // 形如 -sstop
                 if (*p) {
                     ngx_signal = (char *) p;
 
+                // 形如 -s stop
                 } else if (argv[++i]) {
                     ngx_signal = argv[i];
 
@@ -859,6 +940,10 @@ ngx_get_options(int argc, char *const *argv)
 }
 
 
+/*
+ * brief  : 保存命令行参数到 ngx_argv.
+ * return : NGX_ERROR/NGX_OK
+ */
 static ngx_int_t
 ngx_save_argv(ngx_cycle_t *cycle, int argc, char *const *argv)
 {
@@ -875,11 +960,13 @@ ngx_save_argv(ngx_cycle_t *cycle, int argc, char *const *argv)
     ngx_os_argv = (char **) argv;
     ngx_argc = argc;
 
+    // 创建指针数组
     ngx_argv = ngx_alloc((argc + 1) * sizeof(char *), cycle->log);
     if (ngx_argv == NULL) {
         return NGX_ERROR;
     }
 
+    // 逐个存储 argc 个命令行参数
     for (i = 0; i < argc; i++) {
         len = ngx_strlen(argv[i]) + 1;
 
@@ -891,6 +978,7 @@ ngx_save_argv(ngx_cycle_t *cycle, int argc, char *const *argv)
         (void) ngx_cpystrn((u_char *) ngx_argv[i], (u_char *) argv[i], len);
     }
 
+    // 最后一个 ngx_argv[] 设置为 NULL
     ngx_argv[i] = NULL;
 
 #endif
@@ -901,16 +989,22 @@ ngx_save_argv(ngx_cycle_t *cycle, int argc, char *const *argv)
 }
 
 
+ /*
+  * brief  : 处理命令行参数中的安装路径, 配置路径.
+  * return : NGX_ERROR/NGX_OK
+  */
 static ngx_int_t
 ngx_process_options(ngx_cycle_t *cycle)
 {
     u_char  *p;
     size_t   len;
 
+    // 设置了 ngx_prefix
     if (ngx_prefix) {
         len = ngx_strlen(ngx_prefix);
         p = ngx_prefix;
 
+        // 若安装路径不是以 "/" 结尾, 则在其末尾添加 "/"
         if (len && !ngx_path_separator(p[len - 1])) {
             p = ngx_pnalloc(cycle->pool, len + 1);
             if (p == NULL) {
@@ -921,11 +1015,13 @@ ngx_process_options(ngx_cycle_t *cycle)
             p[len++] = '/';
         }
 
+        // 将 conf_prefix.data 与 prefix.data 指针均指向 ngx_prefix
         cycle->conf_prefix.len = len;
         cycle->conf_prefix.data = p;
         cycle->prefix.len = len;
         cycle->prefix.data = p;
 
+    // 未设置 ngx_prefix
     } else {
 
 #ifndef NGX_PREFIX
@@ -935,6 +1031,7 @@ ngx_process_options(ngx_cycle_t *cycle)
             return NGX_ERROR;
         }
 
+        // 拷贝当前工作的绝对路径到 p, 作为安装路径
         if (ngx_getcwd(p, NGX_MAX_PATH) == 0) {
             ngx_log_stderr(ngx_errno, "[emerg]: " ngx_getcwd_n " failed");
             return NGX_ERROR;
@@ -944,6 +1041,7 @@ ngx_process_options(ngx_cycle_t *cycle)
 
         p[len++] = '/';
 
+        // 将 conf_prefix.data 与 prefix.data 指针均指向 ngx_prefix
         cycle->conf_prefix.len = len;
         cycle->conf_prefix.data = p;
         cycle->prefix.len = len;
@@ -951,16 +1049,22 @@ ngx_process_options(ngx_cycle_t *cycle)
 
 #else
 
+        /*
+         * 如果定义了 NGX_CONF_PREFIX, 则使用 NGX_CONF_PREFIX 作为配置路径.
+         * 否则, 使用 NGX_PREFIX 作为配置路径
+         */
 #ifdef NGX_CONF_PREFIX
         ngx_str_set(&cycle->conf_prefix, NGX_CONF_PREFIX);
 #else
         ngx_str_set(&cycle->conf_prefix, NGX_PREFIX);
 #endif
+        // 将安装路径设置为 NGX_PREFIX
         ngx_str_set(&cycle->prefix, NGX_PREFIX);
 
 #endif
     }
 
+    // 配置文件路径
     if (ngx_conf_file) {
         cycle->conf_file.len = ngx_strlen(ngx_conf_file);
         cycle->conf_file.data = ngx_conf_file;
@@ -997,6 +1101,10 @@ ngx_process_options(ngx_cycle_t *cycle)
 }
 
 
+/*
+ * brief  : 为 core 模块创建存储配置信息的结构体.
+ * return : NULL/void *
+ */
 static void *
 ngx_core_module_create_conf(ngx_cycle_t *cycle)
 {
@@ -1042,21 +1150,33 @@ ngx_core_module_create_conf(ngx_cycle_t *cycle)
 }
 
 
+/*
+ * brief  : 初始化 core 模块存储配置信息的结构体.
+ * return : NGX_CONF_ERROR/NGX_CONF_OK
+ */
 static char *
 ngx_core_module_init_conf(ngx_cycle_t *cycle, void *conf)
 {
     ngx_core_conf_t  *ccf = conf;
 
+    // 默认后台运行
     ngx_conf_init_value(ccf->daemon, 1);
+    // 默认使用 master
     ngx_conf_init_value(ccf->master, 1);
+    // 默认关闭 timer_resolution
     ngx_conf_init_msec_value(ccf->timer_resolution, 0);
+    // 从 worker 进程收到退出信号到退出的超时时间
     ngx_conf_init_msec_value(ccf->shutdown_timeout, 0);
 
+    // 默认 1 个 worker 进程
     ngx_conf_init_value(ccf->worker_processes, 1);
+    // 默认关闭 debug_points
     ngx_conf_init_value(ccf->debug_points, 0);
 
+    // cpu 亲核绑定
 #if (NGX_HAVE_CPU_AFFINITY)
 
+    // 检查 worker_cpu_affinity 掩码数与 worker_processes 数是否一致
     if (!ccf->cpu_affinity_auto
         && ccf->cpu_affinity_n
         && ccf->cpu_affinity_n != 1
@@ -1071,6 +1191,7 @@ ngx_core_module_init_conf(ngx_cycle_t *cycle, void *conf)
 #endif
 
 
+    // 设置 nginx.pid 文件路径
     if (ccf->pid.len == 0) {
         ngx_str_set(&ccf->pid, NGX_PID_PATH);
     }
@@ -1079,6 +1200,7 @@ ngx_core_module_init_conf(ngx_cycle_t *cycle, void *conf)
         return NGX_CONF_ERROR;
     }
 
+    // 设置 nginx.pid.old.bin 文件路径
     ccf->oldpid.len = ccf->pid.len + sizeof(NGX_OLDPID_EXT);
 
     ccf->oldpid.data = ngx_pnalloc(cycle->pool, ccf->oldpid.len);
@@ -1092,6 +1214,7 @@ ngx_core_module_init_conf(ngx_cycle_t *cycle, void *conf)
 
 #if !(NGX_WIN32)
 
+    // 设置用户, 用户组
     if (ccf->user == (uid_t) NGX_CONF_UNSET_UINT && geteuid() == 0) {
         struct group   *grp;
         struct passwd  *pwd;
@@ -1119,6 +1242,7 @@ ngx_core_module_init_conf(ngx_cycle_t *cycle, void *conf)
     }
 
 
+    // 设置 nginx.lock 文件路径
     if (ccf->lock_file.len == 0) {
         ngx_str_set(&ccf->lock_file, NGX_LOCK_PATH);
     }
@@ -1132,9 +1256,11 @@ ngx_core_module_init_conf(ngx_cycle_t *cycle, void *conf)
 
     lock_file = cycle->old_cycle->lock_file;
 
+    // old nginx 的 lock_file 存在
     if (lock_file.len) {
         lock_file.len--;
 
+        // lock.file.old 与 lock.file.new 文件名称不同
         if (ccf->lock_file.len != lock_file.len
             || ngx_strncmp(ccf->lock_file.data, lock_file.data, lock_file.len)
                != 0)
@@ -1151,6 +1277,7 @@ ngx_core_module_init_conf(ngx_cycle_t *cycle, void *conf)
             return NGX_CONF_ERROR;
         }
 
+    // old nginx 的 lock_file 不存在
     } else {
         cycle->lock_file.len = ccf->lock_file.len + 1;
         cycle->lock_file.data = ngx_pnalloc(cycle->pool,
@@ -1171,6 +1298,17 @@ ngx_core_module_init_conf(ngx_cycle_t *cycle, void *conf)
 }
 
 
+/*
+ * brief  : 解析 user 配置项, 获取 username, user id, group id.
+ * return : NGX_CONF_OK    : 成功
+ *          NGX_CONF_ERROR : 失败
+ *          "is duplicate" : 重复配置
+ * Syntax : user user [group];
+ * Default: user nobody nobody;
+ * Context: main
+ *          Defines user and group credentials used by worker processes.
+ *          If group is omitted, a group whose name equals that of user is used.
+ */
 static char *
 ngx_set_user(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
@@ -1190,10 +1328,12 @@ ngx_set_user(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     struct group     *grp;
     ngx_str_t        *value;
 
+    // 重复配置
     if (ccf->user != (uid_t) NGX_CONF_UNSET_UINT) {
         return "is duplicate";
     }
 
+    // 返回调用进程的用户 id
     if (geteuid() != 0) {
         ngx_conf_log_error(NGX_LOG_WARN, cf, 0,
                            "the \"user\" directive makes sense only "
@@ -1204,8 +1344,10 @@ ngx_set_user(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     value = cf->args->elts;
 
+    // 获取配置项中的 user
     ccf->username = (char *) value[1].data;
 
+    // getpwnam() 函数返回一个指向结构的指针, 结构包含 /etc/passwd 中记录的分解字段
     ngx_set_errno(0);
     pwd = getpwnam((const char *) value[1].data);
     if (pwd == NULL) {
@@ -1214,10 +1356,13 @@ ngx_set_user(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         return NGX_CONF_ERROR;
     }
 
+    // user ID
     ccf->user = pwd->pw_uid;
 
+    // 获取配置项中的 group
     group = (char *) ((cf->args->nelts == 2) ? value[1].data : value[2].data);
 
+    // getgrnam() 函数返回一个指向结构的指针, 该结构包含 /etc/group 中记录的分解字段
     ngx_set_errno(0);
     grp = getgrnam(group);
     if (grp == NULL) {
@@ -1226,6 +1371,7 @@ ngx_set_user(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         return NGX_CONF_ERROR;
     }
 
+    // group ID
     ccf->group = grp->gr_gid;
 
     return NGX_CONF_OK;
@@ -1264,6 +1410,13 @@ ngx_set_env(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 }
 
 
+/*
+ * brief  : 解析 worker_priority 配置项, 将工作进程的调度优先级存储到 ccf->priority 变量中.
+ * return : NGX_CONF_OK      : 成功
+ *          "invalid number" : 无效数值
+ *          "is duplicate"   : 重复配置
+ * note   : 默认 worker_priority 0; 负数表示更高的优先级[-20, 20]
+ */
 static char *
 ngx_set_priority(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
@@ -1278,24 +1431,32 @@ ngx_set_priority(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     value = cf->args->elts;
 
+    // 负数
     if (value[1].data[0] == '-') {
         n = 1;
+        // 符号标志位
         minus = 1;
 
+    // 正数
     } else if (value[1].data[0] == '+') {
         n = 1;
+        // 符号标志位
         minus = 0;
 
+    // 默认值为 0
     } else {
         n = 0;
+        // 符号标志位
         minus = 0;
     }
 
+    // 获取调度优先级的数据部分, 跳过符号位
     ccf->priority = ngx_atoi(&value[1].data[n], value[1].len - n);
     if (ccf->priority == NGX_ERROR) {
         return "invalid number";
     }
 
+    // 添加符号位
     if (minus) {
         ccf->priority = -ccf->priority;
     }
@@ -1304,6 +1465,12 @@ ngx_set_priority(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 }
 
 
+/*
+ * brief  : 解析 worker_cpu_affinity 配置项, 将 wroker 进程判定 CPU.
+ * return : NGX_CONF_OK    : 成功
+ *          NGX_CONF_ERROR : 失败
+ *          "is duplicate" : 重复配置
+ */
 static char *
 ngx_set_cpu_affinity(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
@@ -1329,8 +1496,10 @@ ngx_set_cpu_affinity(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     value = cf->args->elts;
 
+    // 配置信息形如: worker_cpu_affinity auto
     if (ngx_strcmp(value[1].data, "auto") == 0) {
 
+        // auto 后面不再支持其他参数
         if (cf->args->nelts > 3) {
             ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                                "invalid number of arguments in "
@@ -1338,8 +1507,10 @@ ngx_set_cpu_affinity(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             return NGX_CONF_ERROR;
         }
 
+        // 设置 auto 标志位
         ccf->cpu_affinity_auto = 1;
 
+        // 增加一个 cpu_id 到一个集合中
         CPU_ZERO(&mask[0]);
         for (i = 0; i < (ngx_uint_t) ngx_min(ngx_ncpu, CPU_SETSIZE); i++) {
             CPU_SET(i, &mask[0]);
@@ -1347,12 +1518,14 @@ ngx_set_cpu_affinity(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
         n = 2;
 
+    // 配置信息形如: worker_cpu_affinity 0001 0010 0100 1000
     } else {
         n = 1;
     }
 
     for ( /* void */ ; n < cf->args->nelts; n++) {
 
+        // mask 掩码数大于 cpu 核心数
         if (value[n].len > CPU_SETSIZE) {
             ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                          "\"worker_cpu_affinity\" supports up to %d CPUs only",
@@ -1402,6 +1575,10 @@ ngx_set_cpu_affinity(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 }
 
 
+/*
+ * brief  : 获取 cpu 亲核性的配置信息.
+ * return : NULL/ngx_cpuset_t *
+ */
 ngx_cpuset_t *
 ngx_get_cpu_affinity(ngx_uint_t n)
 {
@@ -1419,6 +1596,7 @@ ngx_get_cpu_affinity(ngx_uint_t n)
         return NULL;
     }
 
+    // 以 auto 形式配置的
     if (ccf->cpu_affinity_auto) {
         mask = &ccf->cpu_affinity[ccf->cpu_affinity_n - 1];
 
@@ -1442,6 +1620,7 @@ ngx_get_cpu_affinity(ngx_uint_t n)
         return &result;
     }
 
+    // 以 mask 形式配置的
     if (ccf->cpu_affinity_n > n) {
         return &ccf->cpu_affinity[n];
     }
@@ -1456,6 +1635,12 @@ ngx_get_cpu_affinity(ngx_uint_t n)
 }
 
 
+/*
+ * brief  : 设置 worker 进程数目.
+ * return : NGX_CONF_OK    : 成功
+ *          NGX_CONF_ERROR : 失败
+ *          "is duplicate" : 重复配置
+ */
 static char *
 ngx_set_worker_processes(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
@@ -1470,11 +1655,13 @@ ngx_set_worker_processes(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     value = cf->args->elts;
 
+    // 设置 worker 进程数等于 cpu 核心数
     if (ngx_strcmp(value[1].data, "auto") == 0) {
         ccf->worker_processes = ngx_ncpu;
         return NGX_CONF_OK;
     }
 
+    // 从配置项中获取 worker 进程数
     ccf->worker_processes = ngx_atoi(value[1].data, value[1].len);
 
     if (ccf->worker_processes == NGX_ERROR) {
@@ -1485,6 +1672,12 @@ ngx_set_worker_processes(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 }
 
 
+/*
+ * brief  : 加载动态模块.
+ * return : "is specified too late"
+ *          NGX_CONF_ERROR
+ *          NGX_CONF_OK
+ */
 static char *
 ngx_load_module(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
@@ -1513,6 +1706,7 @@ ngx_load_module(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         return NGX_CONF_ERROR;
     }
 
+    // 加载动态库
     handle = ngx_dlopen(file.data);
     if (handle == NULL) {
         ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
@@ -1521,9 +1715,11 @@ ngx_load_module(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         return NGX_CONF_ERROR;
     }
 
+    // 注册 clearup 的 handler
     cln->handler = ngx_unload_module;
     cln->data = handle;
 
+    // 获取动态库中的 ngx_modules 配置项的值
     modules = ngx_dlsym(handle, "ngx_modules");
     if (modules == NULL) {
         ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
@@ -1532,6 +1728,7 @@ ngx_load_module(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         return NGX_CONF_ERROR;
     }
 
+    // 获取动态库中的 ngx_module_names 配置项的值
     names = ngx_dlsym(handle, "ngx_module_names");
     if (names == NULL) {
         ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
@@ -1540,12 +1737,14 @@ ngx_load_module(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         return NGX_CONF_ERROR;
     }
 
+    // 获取动态库中的 ngx_module_order 配置项的值
     order = ngx_dlsym(handle, "ngx_module_order");
 
     for (i = 0; modules[i]; i++) {
         module = modules[i];
         module->name = names[i];
 
+        // 向 nginx 模块数组中添加动态模块
         if (ngx_add_module(cf, &file, module, order) != NGX_OK) {
             return NGX_CONF_ERROR;
         }
@@ -1569,9 +1768,13 @@ ngx_load_module(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
 #if (NGX_HAVE_DLOPEN)
 
+/*
+ * brief  : 关闭动态模块．
+ */
 static void
 ngx_unload_module(void *data)
 {
+    // data 当前动态库的指针
     void  *handle = data;
 
     if (ngx_dlclose(handle) != 0) {
