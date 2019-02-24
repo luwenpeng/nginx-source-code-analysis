@@ -3,6 +3,7 @@
 # Copyright (C) Nginx, Inc.
 
 
+# 核心模块
 CORE_MODULES="ngx_core_module ngx_errlog_module ngx_conf_module"
 
 CORE_INCS="src/core"
@@ -81,6 +82,7 @@ CORE_SRCS="src/core/nginx.c \
            src/core/ngx_syslog.c"
 
 
+# 事件模块
 EVENT_MODULES="ngx_events_module ngx_event_core_module"
 
 EVENT_INCS="src/event src/event/modules"
@@ -124,6 +126,7 @@ IOCP_SRCS=src/event/modules/ngx_iocp_module.c
 FILE_AIO_SRCS="src/os/unix/ngx_file_aio_read.c"
 LINUX_AIO_SRCS="src/os/unix/ngx_linux_aio_read.c"
 
+# UNIX
 UNIX_INCS="$CORE_INCS $EVENT_INCS src/os/unix"
 
 UNIX_DEPS="$CORE_DEPS $EVENT_DEPS \
@@ -207,6 +210,7 @@ DARWIN_SRCS=src/os/unix/ngx_darwin_init.c
 DARWIN_SENDFILE_SRCS=src/os/unix/ngx_darwin_sendfile_chain.c
 
 
+# win32
 WIN32_INCS="$CORE_INCS $EVENT_INCS src/os/win32"
 
 WIN32_DEPS="$CORE_DEPS $EVENT_DEPS \
