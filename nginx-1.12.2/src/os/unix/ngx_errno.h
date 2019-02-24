@@ -59,6 +59,7 @@ typedef int               ngx_err_t;
 #define NGX_EMLINK        EMLINK
 #endif
 
+// 跨平台
 #if (__hpux__)
 #define NGX_EAGAIN        EWOULDBLOCK
 #else
