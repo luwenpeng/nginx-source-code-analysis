@@ -3,6 +3,7 @@
 # Copyright (C) Nginx, Inc.
 
 
+# 定义变量
 help=no
 
 NGX_PREFIX=
@@ -167,6 +168,7 @@ NGX_POST_CONF_MSG=
 
 opt=
 
+# 根据命令行参数设置变量的值
 for option
 do
     opt="$opt `echo $option | sed -e \"s/\(--[^=]*=\)\(.* .*\)/\1'\2'/\"`"
@@ -397,6 +399,7 @@ done
 NGX_CONFIGURE="$opt"
 
 
+# 输出帮助信息
 if [ $help = yes ]; then
 
 cat << END
@@ -574,6 +577,7 @@ END
 fi
 
 
+# 组合变量
 if [ ".$NGX_PLATFORM" = ".win32" ]; then
     NGX_WINE=$WINE
 fi
