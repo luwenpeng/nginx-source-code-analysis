@@ -3,6 +3,13 @@
 # Copyright (C) Nginx, Inc.
 
 
+# 初始化文件路径
+# objs/autotest
+# objs/autoconf.err
+# objs/Makefile
+# objs/ngx_auto_config.h
+# objs/ngx_auto_headers.h
+# objs/ngx_modules.c
 NGX_MAKEFILE=$NGX_OBJS/Makefile
 NGX_MODULES_C=$NGX_OBJS/ngx_modules.c
 
@@ -41,6 +48,7 @@ fi
 
 
 # create Makefile
+# 创建顶层 Makefile 文件
 
 cat << END > Makefile
 
