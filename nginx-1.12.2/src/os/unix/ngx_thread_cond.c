@@ -9,6 +9,10 @@
 #include <ngx_core.h>
 
 
+/*
+ * brief  : 初始化信号量
+ * return : NGX_ERROR/NGX_OK
+ */
 ngx_int_t
 ngx_thread_cond_create(ngx_thread_cond_t *cond, ngx_log_t *log)
 {
@@ -24,6 +28,10 @@ ngx_thread_cond_create(ngx_thread_cond_t *cond, ngx_log_t *log)
 }
 
 
+/*
+ * brief  : 销毁信号量
+ * return : NGX_ERROR/NGX_OK
+ */
 ngx_int_t
 ngx_thread_cond_destroy(ngx_thread_cond_t *cond, ngx_log_t *log)
 {
@@ -39,6 +47,10 @@ ngx_thread_cond_destroy(ngx_thread_cond_t *cond, ngx_log_t *log)
 }
 
 
+/*
+ * brief  : 发送信号
+ * return : NGX_ERROR/NGX_OK
+ */
 ngx_int_t
 ngx_thread_cond_signal(ngx_thread_cond_t *cond, ngx_log_t *log)
 {
@@ -54,6 +66,10 @@ ngx_thread_cond_signal(ngx_thread_cond_t *cond, ngx_log_t *log)
 }
 
 
+/*
+ * brief  : 等待信号
+ * return : NGX_ERROR/NGX_OK
+ */
 ngx_int_t
 ngx_thread_cond_wait(ngx_thread_cond_t *cond, ngx_thread_mutex_t *mtx,
     ngx_log_t *log)
