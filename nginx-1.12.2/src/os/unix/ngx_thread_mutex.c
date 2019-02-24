@@ -74,6 +74,10 @@
  */
 
 
+/*
+ * brief : 创建线程互斥锁
+ * return: NGX_ERROR/NGX_OK
+ */
 ngx_int_t
 ngx_thread_mutex_create(ngx_thread_mutex_t *mtx, ngx_log_t *log)
 {
@@ -87,6 +91,7 @@ ngx_thread_mutex_create(ngx_thread_mutex_t *mtx, ngx_log_t *log)
         return NGX_ERROR;
     }
 
+    // 提供错误检查
     err = pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
     if (err != 0) {
         ngx_log_error(NGX_LOG_EMERG, log, err,
@@ -112,6 +117,10 @@ ngx_thread_mutex_create(ngx_thread_mutex_t *mtx, ngx_log_t *log)
 }
 
 
+/*
+ * brief  : 销毁线程互斥锁
+ * return : NGX_ERROR/NGX_OK
+ */
 ngx_int_t
 ngx_thread_mutex_destroy(ngx_thread_mutex_t *mtx, ngx_log_t *log)
 {
@@ -128,6 +137,10 @@ ngx_thread_mutex_destroy(ngx_thread_mutex_t *mtx, ngx_log_t *log)
 }
 
 
+/*
+ * brief  : 上锁
+ * return : NGX_ERROR/NGX_OK
+ */
 ngx_int_t
 ngx_thread_mutex_lock(ngx_thread_mutex_t *mtx, ngx_log_t *log)
 {
@@ -144,6 +157,10 @@ ngx_thread_mutex_lock(ngx_thread_mutex_t *mtx, ngx_log_t *log)
 }
 
 
+/*
+ * brief  : 解锁
+ * return : NGX_ERROR/NGX_OK
+ */
 ngx_int_t
 ngx_thread_mutex_unlock(ngx_thread_mutex_t *mtx, ngx_log_t *log)
 {
