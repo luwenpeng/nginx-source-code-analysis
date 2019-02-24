@@ -18,6 +18,10 @@
 #define NGX_MODULE_UNSET_INDEX  (ngx_uint_t) -1
 
 
+/*
+ * configure 脚本检测系统时, 会根据不同的系统设置不同的宏,
+ * nginx 模块根据 configure 生成的宏设置 NGX_MODULE_SIGNATURE
+ */
 #define NGX_MODULE_SIGNATURE_0                                                \
     ngx_value(NGX_PTR_SIZE) ","                                               \
     ngx_value(NGX_SIG_ATOMIC_T_SIZE) ","                                      \
@@ -197,6 +201,7 @@
 #define NGX_MODULE_SIGNATURE_34  "0"
 #endif
 
+// 生成模块签名
 #define NGX_MODULE_SIGNATURE                                                  \
     NGX_MODULE_SIGNATURE_0 NGX_MODULE_SIGNATURE_1 NGX_MODULE_SIGNATURE_2      \
     NGX_MODULE_SIGNATURE_3 NGX_MODULE_SIGNATURE_4 NGX_MODULE_SIGNATURE_5      \
@@ -212,16 +217,18 @@
     NGX_MODULE_SIGNATURE_33 NGX_MODULE_SIGNATURE_34
 
 
+// 用于初始化 ngx_module_t 中的 ctx_index, index, name, spare0/1, version, signature
 #define NGX_MODULE_V1                                                         \
     NGX_MODULE_UNSET_INDEX, NGX_MODULE_UNSET_INDEX,                           \
     NULL, 0, 0, nginx_version, NGX_MODULE_SIGNATURE
 
+// 用于初始化 ngx_module_t 中的 spare_hook0 ～ spare_hook7
 #define NGX_MODULE_V1_PADDING  0, 0, 0, 0, 0, 0, 0, 0
 
 
 struct ngx_module_s {
-    ngx_uint_t            ctx_index;
-    ngx_uint_t            index;
+    ngx_uint_t            ctx_index; // 当前模块在同类模块中的索引
+    ngx_uint_t            index; // 当前模块在所有模块中的索引
 
     char                 *name;
 
@@ -231,9 +238,14 @@ struct ngx_module_s {
     ngx_uint_t            version;
     const char           *signature;
 
+    /*
+     * 模块的具体实现, 例如:
+     * ngx_core_module_t, ngx_event_module_t,
+     * ngx_http_module_t, ngx_mail_module_t
+     */
     void                 *ctx;
-    ngx_command_t        *commands;
-    ngx_uint_t            type;
+    ngx_command_t        *commands; // 当前模块所支持的配置项
+    ngx_uint_t            type; // 当前模块所属的模块类型
 
     ngx_int_t           (*init_master)(ngx_log_t *log);
 
@@ -257,10 +269,11 @@ struct ngx_module_s {
 };
 
 
+// 核心模块结构体, 即 ngx_module_s->ctx 的数据项
 typedef struct {
-    ngx_str_t             name;
-    void               *(*create_conf)(ngx_cycle_t *cycle);
-    char               *(*init_conf)(ngx_cycle_t *cycle, void *conf);
+    ngx_str_t             name; // 核心模块名称
+    void               *(*create_conf)(ngx_cycle_t *cycle); // 创建存储配置项的数据结构
+    char               *(*init_conf)(ngx_cycle_t *cycle, void *conf); // 初始化存储配置项的数据结构
 } ngx_core_module_t;
 
 
@@ -274,10 +287,10 @@ ngx_int_t ngx_add_module(ngx_conf_t *cf, ngx_str_t *file,
     ngx_module_t *module, char **order);
 
 
-extern ngx_module_t  *ngx_modules[];
+extern ngx_module_t  *ngx_modules[]; // 定义于 configure 生成的 ngx_modules.c 文件中
 extern ngx_uint_t     ngx_max_module;
 
-extern char          *ngx_module_names[];
+extern char          *ngx_module_names[]; // 定义于 configure 生成的 ngx_modules.c 文件中
 
 
 #endif /* _NGX_MODULE_H_INCLUDED_ */
