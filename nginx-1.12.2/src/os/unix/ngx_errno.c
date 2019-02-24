@@ -29,6 +29,14 @@ static ngx_str_t  *ngx_sys_errlist;
 static ngx_str_t   ngx_unknown_error = ngx_string("Unknown error");
 
 
+/*
+ * brief  : 将 err 的错误描述信息写入 size 大小的 errstr 缓存中.
+ * param  : [in] err 错误码
+ * param  : [in] errstr 用于存储错误描述信息的缓存
+ * param  : [in] size 缓存 errstr 的大小
+ * return : errstr 缓存中下次可继续写入数据的地址
+ * note   : 若 size 大小的空间不足以存储错误描述信息, 则将错误信息截断.
+ */
 u_char *
 ngx_strerror(ngx_err_t err, u_char *errstr, size_t size)
 {
@@ -42,6 +50,10 @@ ngx_strerror(ngx_err_t err, u_char *errstr, size_t size)
 }
 
 
+/*
+ * brief  : 初始化 ngx_sys_errlist.
+ * return : NGX_ERROR/NGX_OK
+ */
 ngx_int_t
 ngx_strerror_init(void)
 {
@@ -85,3 +97,6 @@ failed:
 
     return NGX_ERROR;
 }
+
+
+// TODO 缺少 ngx_strerror_destory()
