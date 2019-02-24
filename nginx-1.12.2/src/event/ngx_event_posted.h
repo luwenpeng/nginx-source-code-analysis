@@ -14,6 +14,9 @@
 #include <ngx_event.h>
 
 
+/*
+ * brief  : 将 ev 加入事件队列 q 的尾部.
+ */
 #define ngx_post_event(ev, q)                                                 \
                                                                               \
     if (!(ev)->posted) {                                                      \
@@ -28,6 +31,9 @@
     }
 
 
+/*
+ * brief  : 将 ev 从其所在的事件队列中删除.
+ */
 #define ngx_delete_posted_event(ev)                                           \
                                                                               \
     (ev)->posted = 0;                                                         \
