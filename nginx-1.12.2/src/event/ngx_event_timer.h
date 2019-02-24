@@ -28,6 +28,9 @@ ngx_int_t ngx_event_no_timers_left(void);
 extern ngx_rbtree_t  ngx_event_timer_rbtree;
 
 
+/*
+ * brief  : 从红黑树中删除一个定时器
+ */
 static ngx_inline void
 ngx_event_del_timer(ngx_event_t *ev)
 {
@@ -47,6 +50,14 @@ ngx_event_del_timer(ngx_event_t *ev)
 }
 
 
+/*
+ * brief  : 向红黑树中增加一个定时器
+ * param  : [in] ev 事件结构体
+ * param  : [in] timer 超时时间, 单位毫秒
+ * note   : 若该 ev 先前注册过 timer, 再次在该 ev 上注册的超时时间在原来基础上
+ *          增加或减少在 NGX_TIMER_LAZY_DELAY(300ms) 之内, 则新注册的超时时间不
+ *          起作用, 仍使用原来的值.
+ */
 static ngx_inline void
 ngx_event_add_timer(ngx_event_t *ev, ngx_msec_t timer)
 {
@@ -65,6 +76,7 @@ ngx_event_add_timer(ngx_event_t *ev, ngx_msec_t timer)
 
         diff = (ngx_msec_int_t) (key - ev->timer.key);
 
+        // ngx_abs(diff) 取 diff 的绝对值
         if (ngx_abs(diff) < NGX_TIMER_LAZY_DELAY) {
             ngx_log_debug3(NGX_LOG_DEBUG_EVENT, ev->log, 0,
                            "event timer: %d, old: %M, new: %M",
