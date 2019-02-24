@@ -12,7 +12,25 @@
 #include <ngx_config.h>
 #include <ngx_core.h>
 
+/* nginx 原子锁的实现
+ * 基于不同的平台采取不同的实现, 当前代码中一共包括 7 种平台的实现,
+ * 前 3 种情况由 auto 脚本确定
+ *
+ * case 1: NGX_HAVE_LIBATOMIC   由 auto/lib/libatomic/conf 脚本判断
+ * case 2: NGX_DARWIN_ATOMIC    由 auto/os/darwin          脚本判断
+ * case 3: NGX_HAVE_GCC_ATOMIC  由 auto/cc/conf            脚本判断
+ *
+ * 后 4 种情况由编译器确定
+ *
+ * case 4: __i386__ || __i386                  __i386__ 处理器架构
+ * case 5: __amd64__ || __amd64                AMD64    处理器架构
+ * case 6: __sparc__ || __sparc || __sparcv9   SPARC    处理器架构
+ * case 7: __powerpc__ || __POWERPC__          PowerPC  处理器架构
+ *
+ * 优先采用排序靠前的方案
+ */
 
+// case 1
 #if (NGX_HAVE_LIBATOMIC)
 
 #define AO_REQUIRE_CAS
@@ -38,6 +56,7 @@ typedef volatile ngx_atomic_uint_t  ngx_atomic_t;
 #define ngx_cpu_pause()
 
 
+// case 2
 #elif (NGX_DARWIN_ATOMIC)
 
 /*
@@ -88,6 +107,7 @@ typedef uint32_t                    ngx_atomic_uint_t;
 typedef volatile ngx_atomic_uint_t  ngx_atomic_t;
 
 
+// case 3
 #elif (NGX_HAVE_GCC_ATOMIC)
 
 /* GCC 4.1 builtin atomic operations */
@@ -121,6 +141,7 @@ typedef volatile ngx_atomic_uint_t  ngx_atomic_t;
 #endif
 
 
+// case 4
 #elif ( __i386__ || __i386 )
 
 typedef int32_t                     ngx_atomic_int_t;
@@ -162,6 +183,7 @@ ngx_cpu_pause(void);
 #endif
 
 
+// case 5
 #elif ( __amd64__ || __amd64 )
 
 typedef int64_t                     ngx_atomic_int_t;
@@ -203,6 +225,7 @@ ngx_cpu_pause(void);
 #endif
 
 
+// case 6
 #elif ( __sparc__ || __sparc || __sparcv9 )
 
 #if (NGX_PTR_SIZE == 8)
@@ -238,6 +261,7 @@ typedef volatile ngx_atomic_uint_t  ngx_atomic_t;
 #endif
 
 
+// case 7
 #elif ( __powerpc__ || __POWERPC__ )
 
 #define NGX_HAVE_ATOMIC_OPS  1
@@ -261,8 +285,10 @@ typedef volatile ngx_atomic_uint_t  ngx_atomic_t;
 
 #include "ngx_gcc_atomic_ppc.h"
 
+// END
 #endif
 
+/*****************************************************************************/
 
 #if !(NGX_HAVE_ATOMIC_OPS)
 
