@@ -22,6 +22,7 @@ typedef struct {
 
 
 typedef struct {
+// 若支持原子锁则使用原子锁
 #if (NGX_HAVE_ATOMIC_OPS)
     ngx_atomic_t  *lock;
 #if (NGX_HAVE_POSIX_SEM)
@@ -29,10 +30,12 @@ typedef struct {
     ngx_uint_t     semaphore;
     sem_t          sem;
 #endif
+// 若不支持原子锁则使用文件锁
 #else
     ngx_fd_t       fd;
     u_char        *name;
 #endif
+    // 自旋锁循环次数从 1,2,4,8,..., 到 spin
     ngx_uint_t     spin;
 } ngx_shmtx_t;
 
