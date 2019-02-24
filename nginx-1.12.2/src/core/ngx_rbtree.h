@@ -41,6 +41,12 @@ struct ngx_rbtree_s {
 };
 
 
+/*
+ * brief  : 初始化红黑树
+ * param  : [in] tree 红黑树管理结构体地址
+ * param  : [in] s 哨兵结点地址
+ * param  : [in] i ngx_rbtree_insert_pt 类型的函数指针, 是红黑树结点排序的依据
+ */
 #define ngx_rbtree_init(tree, s, i)                                           \
     ngx_rbtree_sentinel_init(s);                                              \
     (tree)->root = s;                                                         \
@@ -70,6 +76,11 @@ ngx_rbtree_node_t *ngx_rbtree_next(ngx_rbtree_t *tree,
 #define ngx_rbtree_sentinel_init(node)  ngx_rbt_black(node)
 
 
+/*
+ * brief  : 获取 node 及其左子树中的最小结点
+ * note   : 调用 ngx_rbtree_min(ptree->root, ptree->sentinel) 前要判断红黑树是否为空.
+ *          即：if (ptree->root == ptree->sentinel) return;
+ */
 static ngx_inline ngx_rbtree_node_t *
 ngx_rbtree_min(ngx_rbtree_node_t *node, ngx_rbtree_node_t *sentinel)
 {
