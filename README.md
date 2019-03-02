@@ -62,6 +62,9 @@ mygit [add] (core) nginx.h
     [add] ngx_rbtree.c
     [add] ngx_rbtree.h
 
+    [add] ngx_radix_tree.c
+    [add] ngx_radix_tree.h
+
 [nginx-times 时间缓存](http://www.luwenpeng.cn/2019/02/19/nginx-times/)
 
     [add] ngx_times.c
