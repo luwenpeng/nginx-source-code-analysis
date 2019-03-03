@@ -37,49 +37,57 @@ mygit [add] (core) nginx.h
     [add] nginx.c
     [add] nginx.h
 
-[nginx-arry 数据结构](http://www.luwenpeng.cn/2018/11/12/nginx-arry/)
+[nginx数组](http://www.luwenpeng.cn/2018/11/12/nginx%E6%95%B0%E7%BB%84/)
 
     [add] ngx_array.c
     [add] ngx_array.h
 
-[nginx-list 数据结构](http://www.luwenpeng.cn/2018/11/06/nginx-list/)
+[nginx链表](http://www.luwenpeng.cn/2018/11/06/nginx%E9%93%BE%E8%A1%A8/)
 
     [add] ngx_list.c
     [add] ngx_list.h
 
-[nginx-queus 数据结构](http://www.luwenpeng.cn/2018/11/12/nginx-queue/)
+[nginx队列](http://www.luwenpeng.cn/2018/11/12/nginx%E9%98%9F%E5%88%97/)
 
     [add] ngx_queue.c
     [add] ngx_queue.h
 
-[nginx-module 设计](http://www.luwenpeng.cn/2018/12/15/nginx-module-design/)
-[nginx-module 执行顺序](http://www.luwenpeng.cn/2018/12/22/nginx-module-exec-order/)
-[nginx-module 加载过程](http://www.luwenpeng.cn/2018/12/30/nginx-module-load-process/)
+[nginx模块设计](http://www.luwenpeng.cn/2018/12/15/nginx%E6%A8%A1%E5%9D%97%E8%AE%BE%E8%AE%A1/)
+[nginx模块执行顺序](http://www.luwenpeng.cn/2018/12/22/nginx%E6%A8%A1%E5%9D%97%E6%89%A7%E8%A1%8C%E9%A1%BA%E5%BA%8F/)
+[nginx模块加载过程](http://www.luwenpeng.cn/2018/12/30/nginx%E6%A8%A1%E5%9D%97%E5%8A%A0%E8%BD%BD%E8%BF%87%E7%A8%8B/)
 
     [add] ngx_module.c
     [add] ngx_module.h
 
+[nginx红黑树]
+
     [add] ngx_rbtree.c
     [add] ngx_rbtree.h
+
+[nginx基数树]
 
     [add] ngx_radix_tree.c
     [add] ngx_radix_tree.h
 
-[nginx-times 时间缓存](http://www.luwenpeng.cn/2019/02/19/nginx-times/)
+[nginx时间缓存](http://www.luwenpeng.cn/2019/02/19/nginx%E6%97%B6%E9%97%B4%E7%BC%93%E5%AD%98/)
 
     [add] ngx_times.c
     [add] ngx_times.h
+
+[nginx共享内存锁]
 
     [add] ngx_shmtx.c
     [add] ngx_shmtx.h
 
 **event**
 
+[nginx事件队列]
+
     [add] ngx_event_posted.c
     [add] ngx_event_posted.h
 
-[nginx-event-timer 定时器接口](http://www.luwenpeng.cn/2018/11/17/nginx-timer-API)
-[nginx-event-timer 定时器原理](http://www.luwenpeng.cn/2018/11/18/nginx-timer-%E5%8E%9F%E7%90%86/)
+[nginx定时器API](http://www.luwenpeng.cn/2018/11/17/nginx%E5%AE%9A%E6%97%B6%E5%99%A8API/)
+[nginx定时器原理](http://www.luwenpeng.cn/2018/11/18/nginx%E5%AE%9A%E6%97%B6%E5%99%A8%E5%8E%9F%E7%90%86/)
 
     [add] ngx_event_timer.c
     [add] ngx_event_timer.h
