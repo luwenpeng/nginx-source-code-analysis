@@ -2,6 +2,12 @@
 
 nginx 源码解析, 持续更新中...
 
+### mystrace
+
+[mystrace](https://github.com/l-w-p/mytrace)
+
+[如何使用 mytrace 分析 nginx 函数调用](http://www.luwenpeng.cn/2019/03/09/%E4%BD%BF%E7%94%A8mytrace%E5%88%86%E6%9E%90nginx%E5%87%BD%E6%95%B0%E8%B0%83%E7%94%A8%E5%85%B3%E7%B3%BB/)
+
 ### 文章列表
 
 [my-nginx-doc](http://www.luwenpeng.cn/)
