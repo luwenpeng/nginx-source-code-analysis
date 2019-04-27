@@ -383,7 +383,50 @@ ngx_http_variable_value_t  ngx_http_variable_true_value =
 
 static ngx_uint_t  ngx_http_variable_depth = 100;
 
+/*
+ * 函数调用关系：
+ *
+ *    +----------------------------------+
+ *<a>.| ngx_http_variables_add_core_vars |          添加<http 核心模块>定义的<变量>
+ *    +----------------------------------+
+ *      |   +-----------------------+
+ *      +-> | ngx_http_add_variable |               添加<变量>
+ *          +-----------------------+
+ *            |   +------------------------------+
+ *            +-> | ngx_http_add_prefix_variable |  添加<前缀变量>
+ *                +------------------------------+
+ *
+ *    +-----------------------------+
+ *<b>.| ngx_http_get_variable_index |               通过<变量名>获取<索引>
+ *    +-----------------------------+
+ *
+ *    +------------------------------+
+ *<c>.| ngx_http_variables_init_vars |              初始化<变量>
+ *    +------------------------------+
+ *
+ *    +-----------------------+
+ *<d>.| ngx_http_get_variable |                     通过<变量名>获取<变量值>
+ *    +-----------------------+
+ *      |   +-------------------------------+
+ *      +-> | ngx_http_get_flushed_variable |       通过<变量索引>获取<变量值>
+ *          +-------------------------------+
+ *            |   +-------------------------------+
+ *            +-> | ngx_http_get_indexed_variable | 通过<变量索引>获取<变量值>
+ *                +-------------------------------+
+ */
 
+
+/*
+ * brief  : 将 $name 变量添加到存储结构中。
+ *          若是普通变量则存储到 cmcf->variables_keys   哈希键数组中(后续会进行哈希处理)；
+ *          若是前缀变量则存储到 cmcf->prefix_variables 前缀数组中。
+ * param  : [in] cf
+ * param  : [in] name : 变量名
+ * param  : [in] flags : 变量的属性
+ *            若 flags 中有 NGX_HTTP_VAR_PREFIX     则加入前缀变量表
+ *            若 flags 中有 NGX_HTTP_VAR_CHANGEABLE 则允许重名变量相互覆盖
+ * return : NULL/ngx_http_variable_t *
+ */
 ngx_http_variable_t *
 ngx_http_add_variable(ngx_conf_t *cf, ngx_str_t *name, ngx_uint_t flags)
 {
@@ -393,44 +436,60 @@ ngx_http_add_variable(ngx_conf_t *cf, ngx_str_t *name, ngx_uint_t flags)
     ngx_http_variable_t        *v;
     ngx_http_core_main_conf_t  *cmcf;
 
+    // 变量名为空
     if (name->len == 0) {
         ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                            "invalid variable name \"$\"");
         return NULL;
     }
 
+    // flag 为前缀变量则加入前缀变量表中
     if (flags & NGX_HTTP_VAR_PREFIX) {
         return ngx_http_add_prefix_variable(cf, name, flags);
     }
 
+    // 获取 main conf 作用域的变量表
     cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
 
     key = cmcf->variables_keys->keys.elts;
     for (i = 0; i < cmcf->variables_keys->keys.nelts; i++) {
+        // $name 变量不在 main 作用域的变量表中
         if (name->len != key[i].key.len
             || ngx_strncasecmp(name->data, key[i].key.data, name->len) != 0)
         {
             continue;
         }
 
+        // $name 变量在 main 作用域的变量表中
         v = key[i].value;
 
+        // 变量未配置 NGX_HTTP_VAR_CHANGEABLE 选项，则不可重复
         if (!(v->flags & NGX_HTTP_VAR_CHANGEABLE)) {
             ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                                "the duplicate \"%V\" variable", name);
             return NULL;
         }
 
+        // 变量配置 NGX_HTTP_VAR_CHANGEABLE 选项，则允许覆盖
+
+        /*
+         * 去除 NGX_HTTP_VAR_WEAK 标志
+         *                     ~NGX_HTTP_VAR_WEAK  (取反)
+         *             flags | ~NGX_HTTP_VAR_WEAK  (去除 flags 中的 NGX_HTTP_VAR_WEAK)
+         * v->flags & (flags | ~NGX_HTTP_VAR_WEAK) (取集合)
+         */
         v->flags &= flags | ~NGX_HTTP_VAR_WEAK;
 
         return v;
     }
 
+    // 为新增变量分配存储结构
     v = ngx_palloc(cf->pool, sizeof(ngx_http_variable_t));
     if (v == NULL) {
         return NULL;
     }
 
+    // 以小写存储变量名称
     v->name.len = name->len;
     v->name.data = ngx_pnalloc(cf->pool, name->len);
     if (v->name.data == NULL) {
@@ -445,6 +504,7 @@ ngx_http_add_variable(ngx_conf_t *cf, ngx_str_t *name, ngx_uint_t flags)
     v->flags = flags;
     v->index = 0;
 
+    // 将变量加入哈希键数组中
     rc = ngx_hash_add_key(cmcf->variables_keys, &v->name, v, 0);
 
     if (rc == NGX_ERROR) {
@@ -461,6 +521,14 @@ ngx_http_add_variable(ngx_conf_t *cf, ngx_str_t *name, ngx_uint_t flags)
 }
 
 
+/*
+ * brief  : 将前缀变量添加到前缀数组中。
+ * param  : [in] cf
+ * param  : [in] name : 变量名
+ * param  : [in] flags : 变量的属性（必须含有 NGX_HTTP_VAR_PREFIX）
+ *            若 flags 中有 NGX_HTTP_VAR_CHANGEABLE 则允许重名变量相互覆盖
+ * return : NULL/ngx_http_variable_t *
+ */
 static ngx_http_variable_t *
 ngx_http_add_prefix_variable(ngx_conf_t *cf, ngx_str_t *name, ngx_uint_t flags)
 {
@@ -472,30 +540,42 @@ ngx_http_add_prefix_variable(ngx_conf_t *cf, ngx_str_t *name, ngx_uint_t flags)
 
     v = cmcf->prefix_variables.elts;
     for (i = 0; i < cmcf->prefix_variables.nelts; i++) {
+        // $name 变量不在 main 作用域的变量表中
         if (name->len != v[i].name.len
             || ngx_strncasecmp(name->data, v[i].name.data, name->len) != 0)
         {
             continue;
         }
 
+        // $name 变量在 main 作用域的变量表中
         v = &v[i];
 
+        // 变量未配置 NGX_HTTP_VAR_CHANGEABLE 选项，则不可重复
         if (!(v->flags & NGX_HTTP_VAR_CHANGEABLE)) {
             ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                                "the duplicate \"%V\" variable", name);
             return NULL;
         }
 
+        /*
+         * 去除 NGX_HTTP_VAR_WEAK 标志
+         *                     ~NGX_HTTP_VAR_WEAK  (取反)
+         *             flags | ~NGX_HTTP_VAR_WEAK  (去除 flags 中的 NGX_HTTP_VAR_WEAK)
+         * v->flags & (flags | ~NGX_HTTP_VAR_WEAK) (取集合)
+         */
         v->flags &= flags | ~NGX_HTTP_VAR_WEAK;
 
+        // 变量配置 NGX_HTTP_VAR_CHANGEABLE 选项，则允许覆盖
         return v;
     }
 
+    // 为新增变量分配存储结构
     v = ngx_array_push(&cmcf->prefix_variables);
     if (v == NULL) {
         return NULL;
     }
 
+    // 以小写存储变量名称
     v->name.len = name->len;
     v->name.data = ngx_pnalloc(cf->pool, name->len);
     if (v->name.data == NULL) {
@@ -514,6 +594,16 @@ ngx_http_add_prefix_variable(ngx_conf_t *cf, ngx_str_t *name, ngx_uint_t flags)
 }
 
 
+/*
+ * brief  : 通过变量名获取变量在 cmcf->variables 数组中的索引。
+ *          在初始变量之前，postconfiguration() 阶段获取变量索引。
+ *
+ *          若变量在   cmcf->variables 数组中则返回其索引。
+ *          若变量不在 cmcf->variables 数组中则添加，然后返回其索引。
+ * param  : [in] cf
+ * param  : [in] name : 变量名
+ * return : NGX_ERROR/NGX_OK
+ */
 ngx_int_t
 ngx_http_get_variable_index(ngx_conf_t *cf, ngx_str_t *name)
 {
@@ -531,6 +621,7 @@ ngx_http_get_variable_index(ngx_conf_t *cf, ngx_str_t *name)
 
     v = cmcf->variables.elts;
 
+    // 若为空则创建
     if (v == NULL) {
         if (ngx_array_init(&cmcf->variables, cf->pool, 4,
                            sizeof(ngx_http_variable_t))
@@ -539,8 +630,10 @@ ngx_http_get_variable_index(ngx_conf_t *cf, ngx_str_t *name)
             return NGX_ERROR;
         }
 
+    // 若非空则查找
     } else {
         for (i = 0; i < cmcf->variables.nelts; i++) {
+            // 若找到则返回索引
             if (name->len != v[i].name.len
                 || ngx_strncasecmp(name->data, v[i].name.data, name->len) != 0)
             {
@@ -551,6 +644,7 @@ ngx_http_get_variable_index(ngx_conf_t *cf, ngx_str_t *name)
         }
     }
 
+    // 若未找到则添加并返回索引
     v = ngx_array_push(&cmcf->variables);
     if (v == NULL) {
         return NGX_ERROR;
@@ -574,6 +668,14 @@ ngx_http_get_variable_index(ngx_conf_t *cf, ngx_str_t *name)
 }
 
 
+/*
+ * brief  : 通过变量(在 cmcf->variables 数组中的)索引获取变量的值。
+ *          变量的值是存在 r->variables[index] 中的。
+ * param  : [in] r
+ * param  : [in] index
+ * return : NULL || v->not_found : 失败
+ *          其他情况为成功。
+ */
 ngx_http_variable_value_t *
 ngx_http_get_indexed_variable(ngx_http_request_t *r, ngx_uint_t index)
 {
@@ -582,12 +684,14 @@ ngx_http_get_indexed_variable(ngx_http_request_t *r, ngx_uint_t index)
 
     cmcf = ngx_http_get_module_main_conf(r, ngx_http_core_module);
 
+    // 无效的 index，超出 cmcf->variables 数组元素个数
     if (cmcf->variables.nelts <= index) {
         ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
                       "unknown variable index: %ui", index);
         return NULL;
     }
 
+    // 未找到/有效
     if (r->variables[index].not_found || r->variables[index].valid) {
         return &r->variables[index];
     }
@@ -603,15 +707,18 @@ ngx_http_get_indexed_variable(ngx_http_request_t *r, ngx_uint_t index)
 
     ngx_http_variable_depth--;
 
+    // 执行该变量对应的 get_handler 回调获取变量的值，并存储到 r->variables[index] 中
     if (v[index].get_handler(r, &r->variables[index], v[index].data)
         == NGX_OK)
     {
         ngx_http_variable_depth++;
 
+        // 该变量不允许缓存，设置 r->variables[index] 中的标志位
         if (v[index].flags & NGX_HTTP_VAR_NOCACHEABLE) {
             r->variables[index].no_cacheable = 1;
         }
 
+        // 成功返回
         return &r->variables[index];
     }
 
@@ -624,6 +731,14 @@ ngx_http_get_indexed_variable(ngx_http_request_t *r, ngx_uint_t index)
 }
 
 
+/*
+ * brief  : 通过变量索引直接获取缓存中变量的值，若该变量的值不可缓存，
+ *          则调用 ngx_http_get_indexed_variable() 重新获取。
+ * param  : [in] r
+ * param  : [in] index
+ * return : NULL || v->not_found : 失败
+ *          其他情况为成功。
+ */
 ngx_http_variable_value_t *
 ngx_http_get_flushed_variable(ngx_http_request_t *r, ngx_uint_t index)
 {
@@ -632,18 +747,28 @@ ngx_http_get_flushed_variable(ngx_http_request_t *r, ngx_uint_t index)
     v = &r->variables[index];
 
     if (v->valid || v->not_found) {
+        // 若可被缓存，则直接返回
         if (!v->no_cacheable) {
             return v;
         }
 
+        // 重置标志
         v->valid = 0;
         v->not_found = 0;
     }
 
+    // 再次获取
     return ngx_http_get_indexed_variable(r, index);
 }
 
 
+/*
+ * brief  : 通过变量名获取变量的值。
+ * param  : [in] name : 变量名
+ * param  : [in] key : 变量名的哈希值
+ * return : NULL || v->not_found : 失败
+ *          其他情况为成功。
+ */
 ngx_http_variable_value_t *
 ngx_http_get_variable(ngx_http_request_t *r, ngx_str_t *name, ngx_uint_t key)
 {
@@ -655,9 +780,15 @@ ngx_http_get_variable(ngx_http_request_t *r, ngx_str_t *name, ngx_uint_t key)
 
     cmcf = ngx_http_get_module_main_conf(r, ngx_http_core_module);
 
+    // 在普通变量的哈希表中查找
     v = ngx_hash_find(&cmcf->variables_hash, key, name->data, name->len);
 
+    // 找到
     if (v) {
+        /*
+         * 该变量拥有索引，则通过变量索引直接获取缓存中变量的值，
+         * 若该变量的值不可缓存，则调用 ngx_http_get_indexed_variable() 重新获取。
+         */
         if (v->flags & NGX_HTTP_VAR_INDEXED) {
             return ngx_http_get_flushed_variable(r, v->index);
         }
@@ -670,6 +801,7 @@ ngx_http_get_variable(ngx_http_request_t *r, ngx_str_t *name, ngx_uint_t key)
 
         ngx_http_variable_depth--;
 
+        // 执行变量的 get_handler() 回调函数获取变量的值，并存储到 vv 中。
         vv = ngx_palloc(r->pool, sizeof(ngx_http_variable_value_t));
 
         if (vv && v->get_handler(r, vv, v->data) == NGX_OK) {
@@ -681,6 +813,8 @@ ngx_http_get_variable(ngx_http_request_t *r, ngx_str_t *name, ngx_uint_t key)
         return NULL;
     }
 
+    // 未找到
+
     vv = ngx_palloc(r->pool, sizeof(ngx_http_variable_value_t));
     if (vv == NULL) {
         return NULL;
@@ -691,6 +825,7 @@ ngx_http_get_variable(ngx_http_request_t *r, ngx_str_t *name, ngx_uint_t key)
     v = cmcf->prefix_variables.elts;
     n = cmcf->prefix_variables.nelts;
 
+    // 在前缀变量数组中查找
     for (i = 0; i < cmcf->prefix_variables.nelts; i++) {
         if (name->len >= v[i].name.len && name->len > len
             && ngx_strncmp(name->data, v[i].name.data, v[i].name.len) == 0)
@@ -700,6 +835,7 @@ ngx_http_get_variable(ngx_http_request_t *r, ngx_str_t *name, ngx_uint_t key)
         }
     }
 
+    // 执行 get_handler() 回调函数获取变量的值，并存储到 vv 中。
     if (n != cmcf->prefix_variables.nelts) {
         if (v[n].get_handler(r, vv, (uintptr_t) name) == NGX_OK) {
             return vv;
@@ -708,11 +844,15 @@ ngx_http_get_variable(ngx_http_request_t *r, ngx_str_t *name, ngx_uint_t key)
         return NULL;
     }
 
+    // 未获取到变量的值
     vv->not_found = 1;
 
     return vv;
 }
 
+/******************************************************************************
+ * 定义变量的 set_handler/get_handler 开始
+ ******************************************************************************/
 
 static ngx_int_t
 ngx_http_variable_request(ngx_http_request_t *r, ngx_http_variable_value_t *v,
@@ -2330,6 +2470,9 @@ ngx_http_variable_time_local(ngx_http_request_t *r,
     return NGX_OK;
 }
 
+/******************************************************************************
+ * 定义变量的 set_handler/get_handler 结束
+ ******************************************************************************/
 
 void *
 ngx_http_map_find(ngx_http_request_t *r, ngx_http_map_t *map, ngx_str_t *match)
@@ -2339,8 +2482,10 @@ ngx_http_map_find(ngx_http_request_t *r, ngx_http_map_t *map, ngx_str_t *match)
     size_t       len;
     ngx_uint_t   key;
 
+    // 获取目标字符串的长度
     len = match->len;
 
+    // 若目标字符串非空，则分配等长的存储空间
     if (len) {
         low = ngx_pnalloc(r->pool, len);
         if (low == NULL) {
@@ -2351,15 +2496,20 @@ ngx_http_map_find(ngx_http_request_t *r, ngx_http_map_t *map, ngx_str_t *match)
         low = NULL;
     }
 
+    // 将目标字符串转换成小写存储到 low 中，并计算哈希值
     key = ngx_hash_strlow(low, match->data, len);
 
+    // 在哈希表中查找目标字符串
     value = ngx_hash_find_combined(&map->hash, key, low, len);
+
+    // 在哈希表中找到则返回
     if (value) {
         return value;
     }
 
 #if (NGX_PCRE)
 
+    // 若目标字符串非空，且支持正则
     if (len && map->nregex) {
         ngx_int_t              n;
         ngx_uint_t             i;
@@ -2369,12 +2519,14 @@ ngx_http_map_find(ngx_http_request_t *r, ngx_http_map_t *map, ngx_str_t *match)
 
         for (i = 0; i < map->nregex; i++) {
 
+            // 正则查找
             n = ngx_http_regex_exec(r, reg[i].regex, match);
 
             if (n == NGX_OK) {
                 return reg[i].value;
             }
 
+            // 未定义
             if (n == NGX_DECLINED) {
                 continue;
             }
@@ -2387,6 +2539,7 @@ ngx_http_map_find(ngx_http_request_t *r, ngx_http_map_t *map, ngx_str_t *match)
 
 #endif
 
+    // 未找到目标字符串
     return NULL;
 }
 
@@ -2545,6 +2698,11 @@ ngx_http_regex_exec(ngx_http_request_t *r, ngx_http_regex_t *re, ngx_str_t *s)
 #endif
 
 
+/*
+ * brief  : 将 nginx http 核心模块定义的变量添加到全局存储结构中。
+ * param  : [in] cf
+ * return : NGX_ERROR/NGX_OK
+ */
 ngx_int_t
 ngx_http_variables_add_core_vars(ngx_conf_t *cf)
 {
@@ -2553,6 +2711,7 @@ ngx_http_variables_add_core_vars(ngx_conf_t *cf)
 
     cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
 
+    // 分配存储空间
     cmcf->variables_keys = ngx_pcalloc(cf->temp_pool,
                                        sizeof(ngx_hash_keys_arrays_t));
     if (cmcf->variables_keys == NULL) {
@@ -2562,12 +2721,14 @@ ngx_http_variables_add_core_vars(ngx_conf_t *cf)
     cmcf->variables_keys->pool = cf->pool;
     cmcf->variables_keys->temp_pool = cf->pool;
 
+    // 初始化 variables_keys 哈希键数组
     if (ngx_hash_keys_array_init(cmcf->variables_keys, NGX_HASH_SMALL)
         != NGX_OK)
     {
         return NGX_ERROR;
     }
 
+    // 初始化 prefix_variables 数组
     if (ngx_array_init(&cmcf->prefix_variables, cf->pool, 8,
                        sizeof(ngx_http_variable_t))
         != NGX_OK)
@@ -2575,12 +2736,22 @@ ngx_http_variables_add_core_vars(ngx_conf_t *cf)
         return NGX_ERROR;
     }
 
+    /*
+     * 循环调用 ngx_http_add_variable() 将 http 核心模块定义的所有变量
+     * ngx_http_core_variables[] 都添加到存储结构中。
+     * 若是普通变量则存储到 cmcf->variables_keys   哈希键数组中(后续会进行哈希处理)；
+     * 若是前缀变量则存储到 cmcf->prefix_variables 前缀数组中。
+     *
+     * 若 flags 中有 NGX_HTTP_VAR_PREFIX     则加入前缀数组中，否则加入哈希键数组中。
+     * 若 flags 中有 NGX_HTTP_VAR_CHANGEABLE 则允许重名变量相互覆盖。
+     */
     for (cv = ngx_http_core_variables; cv->name.len; cv++) {
         v = ngx_http_add_variable(cf, &cv->name, cv->flags);
         if (v == NULL) {
             return NGX_ERROR;
         }
 
+        // 为 ngx_http_variable_t *v 赋值
         *v = *cv;
     }
 
@@ -2588,6 +2759,14 @@ ngx_http_variables_add_core_vars(ngx_conf_t *cf)
 }
 
 
+/*
+ * brief  : 初始化变量。
+ *        1.在前缀变量(数组存储)表和普通变量(哈希存储)表中查找 cmcf->variables
+ *          中真正使用到的变量，并将变量的属性拷贝到 cmcf->variables 中。
+ *        2.对普通变量(哈希存储)表 cmcf->variables_keys 进行哈希操作。
+ * param  : [in] cf
+ * return : NGX_ERROR/NGX_OK
+ */
 ngx_int_t
 ngx_http_variables_init_vars(ngx_conf_t *cf)
 {
@@ -2602,12 +2781,17 @@ ngx_http_variables_init_vars(ngx_conf_t *cf)
 
     cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
 
-    v = cmcf->variables.elts;
-    pv = cmcf->prefix_variables.elts;
-    key = cmcf->variables_keys->keys.elts;
+    v = cmcf->variables.elts;              // 真正使用到的变量
+    pv = cmcf->prefix_variables.elts;      // 定义的前缀变量(数组存储)
+    key = cmcf->variables_keys->keys.elts; // 定义的普通变量(哈希存储)
 
+    /*
+     * 遍历 cmcf->variables 中所有已使用的变量，初始化其 get_handler 和
+     * data 成员，并指定变量索引（即在数组中的下标）
+     */
     for (i = 0; i < cmcf->variables.nelts; i++) {
 
+        // 在 cmcf->variables_keys 哈希键数组中查找 cmcf->variables[i] 变量
         for (n = 0; n < cmcf->variables_keys->keys.nelts; n++) {
 
             av = key[n].value;
@@ -2622,6 +2806,7 @@ ngx_http_variables_init_vars(ngx_conf_t *cf)
                 av->flags |= NGX_HTTP_VAR_INDEXED;
                 v[i].flags = av->flags;
 
+                // 设置 cmcf->variables_keys[] 数组中的变量在 cmcf->variables[] 数组中的索引
                 av->index = i;
 
                 if (av->get_handler == NULL
@@ -2637,7 +2822,9 @@ ngx_http_variables_init_vars(ngx_conf_t *cf)
         len = 0;
         av = NULL;
 
+        // 在 cmcf->prefix_variables 前缀数组中查找 cmcf->variables[i] 变量
         for (n = 0; n < cmcf->prefix_variables.nelts; n++) {
+            // 若有多个前缀变量匹配，则使用最后一个
             if (v[i].name.len >= pv[n].name.len && v[i].name.len > len
                 && ngx_strncmp(v[i].name.data, pv[n].name.data, pv[n].name.len)
                    == 0)
@@ -2647,6 +2834,7 @@ ngx_http_variables_init_vars(ngx_conf_t *cf)
             }
         }
 
+        // av 为 for (prefix_variables.nelts) 中获取到的
         if (av) {
             v[i].get_handler = av->get_handler;
             v[i].data = (uintptr_t) &v[i].name;
@@ -2667,6 +2855,7 @@ ngx_http_variables_init_vars(ngx_conf_t *cf)
     }
 
 
+    // 对于不使用 hash 进行索引查找的变量，将 key 值置为空值
     for (n = 0; n < cmcf->variables_keys->keys.nelts; n++) {
         av = key[n].value;
 
@@ -2676,6 +2865,7 @@ ngx_http_variables_init_vars(ngx_conf_t *cf)
     }
 
 
+    // 设置哈希属性
     hash.hash = &cmcf->variables_hash;
     hash.key = ngx_hash_key;
     hash.max_size = cmcf->variables_hash_max_size;
@@ -2684,6 +2874,7 @@ ngx_http_variables_init_vars(ngx_conf_t *cf)
     hash.pool = cf->pool;
     hash.temp_pool = NULL;
 
+    // 哈希 cmcf->variables_keys
     if (ngx_hash_init(&hash, cmcf->variables_keys->keys.elts,
                       cmcf->variables_keys->keys.nelts)
         != NGX_OK)
